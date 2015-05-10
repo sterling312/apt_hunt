@@ -4,6 +4,10 @@ import operator
 import redis
 import pandas as pd
 
+parser = argparse.ArgumentParser()
+parser.add_argument('-f', '--filename', help='filename if msg exists')
+parser.add_argument('-p', '--pattern', default='soma,hayes valley,marina,mission', help='search pattern')
+
 class OLSRecommender(object):
     pattern = tuple()
     columns = ['bed', 'bath', 'price']
@@ -60,11 +64,16 @@ class OLSRecommender(object):
         return df[df.bed<=self.people]
         
     def run(self):
-        self.read_cache()
         self.clean()
         self.compute_ols()
         df = self.filter()
         return df.to_json()
 
 if __name__ == '__main__':
-    reg = OLSRecommender([])
+    args = parser.parse_args()
+    rec = OLSRecommender(args.pattern)
+    if args.filename:
+        rec.read_msgpack(args.filename)
+    else:
+        rec.read_cache()
+    print rec.run()
