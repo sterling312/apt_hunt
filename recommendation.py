@@ -82,5 +82,4 @@ if __name__ == '__main__':
     else:
         rec.read_cache()
     df = rec.run()
-    df.index = range(len(df))
     print(df.to_json(orient='records', date_format='iso'))
