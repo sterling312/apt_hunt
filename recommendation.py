@@ -6,13 +6,19 @@ import pandas as pd
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-f', '--filename', help='filename if msg exists')
-parser.add_argument('-p', '--pattern', default='soma,hayes valley,marina,mission', help='search pattern')
+parser.add_argument('-s', '--search', default='soma,hayes valley,marina,mission', help='search pattern')
+parser.add_argument('-p', '--people', default=2, type=int, help='max number of people')
+parser.add_argument('-z', '--z_score', default=6, type=int, help='zscore filtered by')
+parser.add_argument('-n', '--nbhd', help='base nbhd')
 
 class OLSRecommender(object):
     pattern = tuple()
-    columns = ['bed', 'bath', 'price']
+    columns = ['bed', 'bath', 'price', 'lat', 'lon']
     
     def __init__(self, pattern, people=1, base_nbhd=None, z_score=1):
+        self.df = None
+        self.nbhd = None
+        self.ols = None
         self.z_score = z_score
         self.people = people
         self.cache = redis.Redis()
@@ -32,10 +38,10 @@ class OLSRecommender(object):
 
     def clean(self):
         self.df['id'] = self.df.url.str.rstrip('.html').str.split('/').str[-1]
-        self.df = df.drop_duplicates(['id', 'timestamp'], take_last=True)
+        self.df = self.df.drop_duplicates(['id', 'timestamp'], take_last=True)
         # figure out a better way to clean bad unicode
         self.df.nbhd = self.df.nbhd.str.lower().str.replace(u'\xe2', u'').str.replace(u'\xa0', '')
-        self.df = self.df.loc[self.df[self.columns].dropna(1).index]
+        self.df = self.df.loc[self.df[self.columns].dropna().index]
 
     def compute_dummy(self):
         bol = reduce(operator.or_, map(self.df.nbhd.str.match, self.pattern))
@@ -57,23 +63,24 @@ class OLSRecommender(object):
         return yhat
 
     def filter(self):
-        yhat = self.coompute_yhat()
+        yhat = self.compute_yhat()
         diff = self.df.price - yhat
         fit = diff<0
         df = self.df[fit]
-        return df[df.bed<=self.people]
+        return df[(df.bed<=self.people)&df.nbhd.isin(self.nbhd)].sort('timestamp', ascending=False)
         
     def run(self):
         self.clean()
         self.compute_ols()
-        df = self.filter()
-        return df.to_json()
+        return self.filter()
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    rec = OLSRecommender(args.pattern)
+    rec = OLSRecommender(args.search, args.people, args.nbhd, args.z_score)
     if args.filename:
         rec.read_msgpack(args.filename)
     else:
         rec.read_cache()
-    print rec.run()
+    df = rec.run()
+    df.index = range(len(df))
+    print(df.to_json(orient='records', date_format='iso'))
