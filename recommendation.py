@@ -3,6 +3,7 @@ import logging
 import operator
 import redis
 import pandas as pd
+from datetime import datetime, timedelta
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-f', '--filename', help='filename if msg exists')
@@ -29,7 +30,7 @@ class OLSRecommender(object):
         self.base_nbhd = base_nbhd
 
     def read_cache(self):
-        keys = sorted(self.cache.keys(), reverse=True)[:12]
+        keys = sorted(self.cache.keys(), reverse=True)[2:]
         self.df = reduce(pd.DataFrame.append, pd.read_msgpack(''.join(self.cache.get(k) for k in keys)))
 
     def read_msgpack(self, filename):
@@ -67,7 +68,8 @@ class OLSRecommender(object):
         diff = self.df.price - yhat
         fit = diff<0
         df = self.df[fit]
-        return df[(df.bed<=self.people)&df.nbhd.isin(self.nbhd)].sort('timestamp', ascending=False)
+        bol = df.timestamp > (datetime.now()-timedelta(3))
+        return df[(df.bed<=self.people)&df.nbhd.isin(self.nbhd)&bol].sort('timestamp', ascending=False)
         
     def run(self):
         self.clean()
