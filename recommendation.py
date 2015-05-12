@@ -1,7 +1,7 @@
 import argparse
-import logging
 import operator
 import redis
+import requests
 import pandas as pd
 
 parser = argparse.ArgumentParser()
@@ -11,10 +11,16 @@ parser.add_argument('-p', '--people', default=2, type=int, help='max number of p
 parser.add_argument('-z', '--z_score', default=6, type=int, help='zscore filtered by')
 parser.add_argument('-n', '--nbhd', help='base nbhd')
 
+def availability_check(url):
+    req = requests.get(url)
+    if req.ok and '(The title on the listings page will be removed in just a few minutes.)' not in req.text:
+        return True
+    return False
+
 class OLSRecommender(object):
     pattern = tuple()
     columns = ['bed', 'bath', 'price', 'lat', 'lon']
-    
+
     def __init__(self, pattern, people=1, base_nbhd=None, z_score=1):
         self.df = None
         self.nbhd = None
@@ -47,7 +53,7 @@ class OLSRecommender(object):
         bol = reduce(operator.or_, map(self.df.nbhd.str.match, self.pattern))
         nbhd = self.df[bol].nbhd.unique()
         self.nbhd = pd.Series(nbhd, index=nbhd)
-        return self.df.nbhd.apply(lambda x: x==self.nbhd)
+        return self.df.nbhd.apply(lambda x: x == self.nbhd)
 
     def compute_ols(self):
         x = self.compute_dummy()
@@ -65,14 +71,16 @@ class OLSRecommender(object):
     def filter(self):
         yhat = self.compute_yhat()
         diff = self.df.price - yhat
-        fit = diff<0
+        fit = diff < 0
         df = self.df[fit]
-        return df[(df.bed<=self.people)&df.nbhd.isin(self.nbhd)].sort('timestamp', ascending=False)
-        
+        return df[(df.bed <= self.people)&df.nbhd.isin(self.nbhd)].sort('timestamp', ascending=False)
+
     def run(self):
         self.clean()
         self.compute_ols()
-        return self.filter()
+        df = self.filter()
+        bol = df.url.apply(availability_check)
+        return df[bol]
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -81,5 +89,5 @@ if __name__ == '__main__':
         rec.read_msgpack(args.filename)
     else:
         rec.read_cache()
-    df = rec.run()
-    print(df.to_json(orient='records', date_format='iso'))
+    data = rec.run()
+    print(data.to_json(orient='records', date_format='iso'))
