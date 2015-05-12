@@ -3,6 +3,7 @@ import operator
 import redis
 import requests
 import pandas as pd
+from datetime import datetime, timedelta
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-f', '--filename', help='filename if msg exists')
@@ -35,8 +36,9 @@ class OLSRecommender(object):
         self.base_nbhd = base_nbhd
 
     def read_cache(self):
-        keys = sorted(self.cache.keys())
+        keys = sorted(self.cache.keys(), reverse=True)[:28]
         self.df = reduce(pd.DataFrame.append, pd.read_msgpack(''.join(self.cache.get(k) for k in keys)))
+        self.df.index = range(len(self.df))
 
     def read_msgpack(self, filename):
         with open(filename) as fh:
@@ -44,10 +46,10 @@ class OLSRecommender(object):
 
     def clean(self):
         self.df['id'] = self.df.url.str.rstrip('.html').str.split('/').str[-1]
-        self.df = self.df.drop_duplicates(['id', 'timestamp'], take_last=True)
         # figure out a better way to clean bad unicode
         self.df.nbhd = self.df.nbhd.str.lower().str.replace(u'\xe2', u'').str.replace(u'\xa0', '')
         self.df = self.df.loc[self.df[self.columns].dropna().index]
+        self.df.drop_duplicates(subset=['id', 'timestamp'], take_last=True, inplace=True)
 
     def compute_dummy(self):
         bol = reduce(operator.or_, map(self.df.nbhd.str.match, self.pattern))
@@ -73,7 +75,8 @@ class OLSRecommender(object):
         diff = self.df.price - yhat
         fit = diff < 0
         df = self.df[fit]
-        return df[(df.bed <= self.people)&df.nbhd.isin(self.nbhd)].sort('timestamp', ascending=False)
+        bol = df.timestamp > (datetime.now().date()-timedelta(7))
+        return df[(df.bed<=self.people)&df.nbhd.isin(self.nbhd)&bol].sort('timestamp', ascending=False)
 
     def run(self):
         self.clean()
@@ -89,5 +92,6 @@ if __name__ == '__main__':
         rec.read_msgpack(args.filename)
     else:
         rec.read_cache()
-    data = rec.run()
-    print(data.to_json(orient='records', date_format='iso'))
+    df = rec.run()
+    if len(df):
+        print(df.to_json(orient='records', date_format='iso'))
