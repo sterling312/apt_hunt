@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-l', '--level', default='INFO')
+parser.add_argument('-u', '--url', default='http://sfbay.craigslist.org/search/sfc/apa', help='base url for your apartment search page')
 parser.add_argument('-s', '--sleep', default=0.1, type=float)
 parser.add_argument('-p', '--pages', default=10, type=int)
 parser.add_argument('-t', '--timeout', default=60*60*24*14, type=int)
@@ -49,8 +50,8 @@ def parse(bs):
     return title, price, bed, bath, sqft, lat, lon, nbhd
 
 class Crawler(object):
-    base_url = 'http://sfbay.craigslist.org/search/sfc/apa'
-    def __init__(self, pages=10, sleep=0.3, timeout=60*60*24*14):
+    def __init__(self, base_url, pages=10, sleep=0.3, timeout=60*60*24*14):
+        self.base_url = base_url
         self.sess = requests.session()
         self.pages = pages
         self.now = datetime.now()
@@ -111,7 +112,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     logging.basicConfig(level=args.level, format='%(asctime)s:%(levelname)s:%(module)s:%(funcName)s:%(lineno)s:%(message)s')
     logging.getLogger('requests').setLevel(logging.WARNING)
-    crawler = Crawler(pages=args.pages, sleep=args.sleep)
+    crawler = Crawler(args.url, pages=args.pages, sleep=args.sleep)
     crawler.run()
 
         
