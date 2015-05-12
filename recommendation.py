@@ -1,5 +1,6 @@
 import argparse
 import operator
+import json
 import redis
 import requests
 import pandas as pd
@@ -94,4 +95,4 @@ if __name__ == '__main__':
         rec.read_cache()
     df = rec.run()
     if len(df):
-        print(df.to_json(orient='records', date_format='iso'))
+        print(json.dumps(json.loads(df.to_json(orient='records', date_format='iso')), indent=4))
