@@ -13,6 +13,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-l', '--level', default='INFO')
 parser.add_argument('-s', '--sleep', default=0.1, type=float)
 parser.add_argument('-p', '--pages', default=10, type=int)
+parser.add_argument('-t', '--timeout', default=60*60*24*14, type=int)
 
 def parse(bs):
     head = bs.find('span', class_='postingtitletext')
@@ -49,12 +50,13 @@ def parse(bs):
 
 class Crawler(object):
     base_url = 'http://sfbay.craigslist.org/search/sfc/apa'
-    def __init__(self, pages=10, sleep=0.3):
+    def __init__(self, pages=10, sleep=0.3, timeout=60*60*24*14):
         self.sess = requests.session()
         self.pages = pages
         self.now = datetime.now()
         self.sleep = sleep
         self.cache = redis.Redis()
+        self.timeout = timeout
 
     def get(self, page=0):
         time.sleep(self.sleep)
@@ -90,11 +92,13 @@ class Crawler(object):
 
     def write(self):
         df = pd.DataFrame(self.data, columns=['desc', 'timestamp', 'url', 'title', 'price', 'bed', 'bath', 'sqft', 'lat', 'lon', 'nbhd'])
+        key = 'cl_apt_{:%Y%m%d%H}'.format(self.now)
         try:
-            self.cache.set('cl_apt_{:%Y%m%d%H}'.format(self.now), df.to_msgpack())
+            self.cache.set(key, df.to_msgpack())
+            self.cache.expire(key, self.timeout)
         except Exception as e:
             logging.error(str(e))
-            df.to_csv('cl_apt_{:%Y%m%d%H}.csv'.format(self.now))
+            df.to_csv('{}.csv'.format(key))
 
     def run(self):
         logging.info('start crawling')
