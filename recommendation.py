@@ -22,7 +22,8 @@ class OLSRecommender(object):
     pattern = tuple()
     columns = ['bed', 'bath', 'price', 'lat', 'lon']
 
-    def __init__(self, pattern, people=1, base_nbhd=None, z_score=1):
+    def __init__(self, pattern, people=1, base_nbhd=None, z_score=1, verify=False):
+        self.verify = verify
         self.df = None
         self.nbhd = None
         self.ols = None
@@ -82,11 +83,13 @@ class OLSRecommender(object):
         self.clean()
         self.compute_ols()
         df = self.filter()
+        if not self.verify:
+            return df
         bol = df.url.apply(availability_check)
         return df[bol]
 
-def search_apartment(search, people, nbhd, z_score):
-    rec = OLSRecommender(search, people, nbhd, z_score)
+def search_apartment(search, people, nbhd, z_score, verify=False):
+    rec = OLSRecommender(search, people, nbhd, z_score, verify)
     rec.read_cache()
     df = rec.run()
     if len(df)>0:
@@ -94,6 +97,6 @@ def search_apartment(search, people, nbhd, z_score):
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    string =  search_apartment(args.search, args.people, args.nbhd, args.z_score)
+    string = search_apartment(args.search, args.people, args.nbhd, args.z_score, True)
     if string:
         print(string)
