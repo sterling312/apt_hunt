@@ -16,6 +16,11 @@ parser.add_argument('-s', '--sleep', default=0.1, type=float)
 parser.add_argument('-p', '--pages', default=10, type=int)
 parser.add_argument('-t', '--timeout', default=60*60*24*14, type=int)
 
+def availability_check(req):
+    if req.ok and '(The title on the listings page will be removed in just a few minutes.)' not in req.text:
+        return True
+    return False
+
 def parse(bs):
     head = bs.find('span', class_='postingtitletext')
     logging.debug(head.text)
@@ -75,7 +80,8 @@ class Crawler(object):
         return map(parse_span, span)
 
     def crawl(self):
-        self.data = reduce(list.__add__, (self.parse_index(BeautifulSoup(self.get(i).text)) for i in xrange(self.pages)))
+        rsp = [self.get(i) for i in xrange(self.pages)]
+        self.data = reduce(list.__add__, (self.parse_index(BeautifulSoup(i.text)) for i in rsp if availability_check(i)))
 
     def get_data(self):
         for row in self.data:
@@ -89,7 +95,11 @@ class Crawler(object):
             if not req.ok:
                 logging.error(req.reason)
                 continue
-            row.extend(list(parse(BeautifulSoup(req.text))))
+            try:
+                row.extend(list(parse(BeautifulSoup(req.text))))
+            except Exception as e:
+                logging.error(e)
+                logging.error(row[2])
 
     def write(self):
         df = pd.DataFrame(self.data, columns=['desc', 'timestamp', 'url', 'title', 'price', 'bed', 'bath', 'sqft', 'lat', 'lon', 'nbhd'])

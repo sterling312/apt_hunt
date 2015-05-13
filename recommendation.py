@@ -7,7 +7,6 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-f', '--filename', help='filename if msg exists')
 parser.add_argument('-s', '--search', default='soma,hayes valley,marina,mission', help='search pattern')
 parser.add_argument('-p', '--people', default=2, type=int, help='max number of people')
 parser.add_argument('-z', '--z_score', default=6, type=int, help='zscore filtered by')
@@ -86,13 +85,15 @@ class OLSRecommender(object):
         bol = df.url.apply(availability_check)
         return df[bol]
 
+def search_apartment(search, people, nbhd, z_score):
+    rec = OLSRecommender(search, people, nbhd, z_score)
+    rec.read_cache()
+    df = rec.run()
+    if len(df)>0:
+        return json.dumps(json.loads(df.to_json(orient='records', date_format='iso')), indent=4)
+
 if __name__ == '__main__':
     args = parser.parse_args()
-    rec = OLSRecommender(args.search, args.people, args.nbhd, args.z_score)
-    if args.filename:
-        rec.read_msgpack(args.filename)
-    else:
-        rec.read_cache()
-    df = rec.run()
-    if len(df):
-        print(json.dumps(json.loads(df.to_json(orient='records', date_format='iso')), indent=4))
+    string =  search_apartment(args.search, args.people, args.nbhd, args.z_score)
+    if string:
+        print(string)
