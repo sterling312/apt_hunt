@@ -46,6 +46,7 @@ class OLSRecommender(object):
             self.df = pd.read_msgpack(fh.read())
 
     def clean(self):
+        self.df = self.df[(self.df.price<self.df.price.quantile(0.975))&(self.df.price>self.df.price.quantile(0.025))]
         self.df['id'] = self.df.url.str.rstrip('.html').str.split('/').str[-1]
         # figure out a better way to clean bad unicode
         self.df.nbhd = self.df.nbhd.str.lower().str.replace(u'\xe2', u'').str.replace(u'\xa0', '')
@@ -88,12 +89,18 @@ class OLSRecommender(object):
         bol = df.url.apply(availability_check)
         return df[bol]
 
-def search_apartment(search, people, nbhd, z_score, verify=False):
+def search_apartment(search, people, nbhd, z_score, verify=False, stats=False):
     rec = OLSRecommender(search, people, nbhd, z_score, verify)
     rec.read_cache()
     df = rec.run()
     if len(df)>0:
-        return json.dumps(json.loads(df.to_json(orient='records', date_format='iso')), indent=4)
+        data = {'data': json.loads(df.to_json(orient='records', date_format='iso'))}
+        if stats:
+            data['t-stat'] = rec.ols.summary_as_matrix.to_dict()
+            data['f-stat'] = rec.ols.f_stat
+            data['r^2'] = rec.ols.r2 
+            data['par'] = rec.ols.beta.bed*rec.people + rec.ols.beta.bath + rec.ols.beta.intercept
+        return json.dumps(data, indent=4)
 
 if __name__ == '__main__':
     args = parser.parse_args()
