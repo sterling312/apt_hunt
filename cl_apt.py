@@ -96,10 +96,10 @@ class Crawler(object):
         except Exception as e:
             logging.error(e)
             logging.error(row[2])
-            continue
+            return
         if not req.ok:
             logging.error(req.reason)
-            continue
+            return
         try:
             row.extend(list(parse(BeautifulSoup(req.text))))
         except Exception as e:
@@ -108,6 +108,7 @@ class Crawler(object):
 
     def write(self):
         df = pd.DataFrame(self.data, columns=['desc', 'timestamp', 'url', 'title', 'price', 'bed', 'bath', 'sqft', 'lat', 'lon', 'nbhd'])
+        logging.debug(df.to_json())
         key = 'cl_apt_{:%Y%m%d%H}'.format(self.now)
         try:
             self.cache.set(key, df.to_msgpack())
