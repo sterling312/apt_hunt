@@ -1,3 +1,5 @@
+from gevent import monkey, pool
+monkey.patch_all()
 import logging
 import argparse
 import time
@@ -15,6 +17,8 @@ parser.add_argument('-u', '--url', default='http://sfbay.craigslist.org/search/s
 parser.add_argument('-s', '--sleep', default=0.1, type=float)
 parser.add_argument('-p', '--pages', default=10, type=int)
 parser.add_argument('-t', '--timeout', default=60*60*24*14, type=int)
+
+adapter = requests.adapters.HTTPAdapter(pool_connections=100)
 
 def availability_check(req):
     if req.ok and '(The title on the listings page will be removed in just a few minutes.)' not in req.text:
@@ -58,11 +62,13 @@ class Crawler(object):
     def __init__(self, base_url, pages=10, sleep=0.3, timeout=60*60*24*14):
         self.base_url = base_url
         self.sess = requests.session()
+        self.sess.mount('http://', adapter)
         self.pages = pages
         self.now = datetime.now()
         self.sleep = sleep
         self.cache = redis.Redis()
         self.timeout = timeout
+        self.pool = pool.Pool(100)
 
     def get(self, page=0):
         time.sleep(self.sleep)
@@ -83,23 +89,22 @@ class Crawler(object):
         rsp = [self.get(i) for i in xrange(self.pages)]
         self.data = reduce(list.__add__, (self.parse_index(BeautifulSoup(i.text)) for i in rsp if availability_check(i)))
 
-    def get_data(self):
-        for row in self.data:
-            time.sleep(self.sleep)
-            try:
-                req = self.sess.get(row[2])
-            except Exception as e:
-                logging.error(e)
-                logging.error(row[2])
-                continue
-            if not req.ok:
-                logging.error(req.reason)
-                continue
-            try:
-                row.extend(list(parse(BeautifulSoup(req.text))))
-            except Exception as e:
-                logging.error(e)
-                logging.error(row[2])
+    def get_data(self, row):
+        time.sleep(self.sleep)
+        try:
+            req = self.sess.get(row[2])
+        except Exception as e:
+            logging.error(e)
+            logging.error(row[2])
+            continue
+        if not req.ok:
+            logging.error(req.reason)
+            continue
+        try:
+            row.extend(list(parse(BeautifulSoup(req.text))))
+        except Exception as e:
+            logging.error(e)
+            logging.error(row[2])
 
     def write(self):
         df = pd.DataFrame(self.data, columns=['desc', 'timestamp', 'url', 'title', 'price', 'bed', 'bath', 'sqft', 'lat', 'lon', 'nbhd'])
@@ -114,7 +119,7 @@ class Crawler(object):
     def run(self):
         logging.info('start crawling')
         self.crawl()
-        self.get_data()
+        self.pool.map(self.get_data, self.data)
         self.write()
         logging.info('finished')
 
@@ -124,6 +129,3 @@ if __name__ == '__main__':
     logging.getLogger('requests').setLevel(logging.WARNING)
     crawler = Crawler(args.url, pages=args.pages, sleep=args.sleep)
     crawler.run()
-
-        
-        
